@@ -1,10 +1,9 @@
-// Main API for designsystemet-mcp
-import { startMcpServer, ToolDefinition, McpServerOptions } from './server';
+// Main API for designbot-mcp
+import { startMcpServer, McpServerOptions } from './server';
 
-// Export all the necessary types and functions
+// Export only the necessary types and functions
 export {
   startMcpServer,
-  ToolDefinition,
   McpServerOptions
 };
 

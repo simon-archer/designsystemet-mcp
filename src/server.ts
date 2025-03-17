@@ -2,63 +2,119 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import OpenAI from 'openai';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-// Tool definition interface
-export interface ToolDefinition {
-  function: {
-    name: string;
-    description: string;
-    parameters: any;
-    parse?: (args: string) => any;
-    function: (args: any) => Promise<any> | any;
-  };
-  metadata?: {
-    name: string;
-    description: string;
-    ui?: {
-      icon: string;
-      label: string;
-      bgColor: string;
-      borderColor: string;
-    };
-  };
-}
-
-// Simple tool examples to get started
-export const simpleTools: ToolDefinition[] = [
-  {
-    function: {
-      name: "echo",
-      description: "Echo back a message",
-      parameters: {
-        type: "object",
-        properties: {
-          message: {
-            type: "string",
-            description: "The message to echo back"
-          }
-        },
-        required: ["message"]
-      },
-      function: async ({ message }: { message: string }) => message
-    }
-  },
-];
-
+// Server options interface
 export interface McpServerOptions {
   name?: string;
   version?: string;
-  tools?: ToolDefinition[];
   openaiApiKey?: string;
+  registryPath?: string;
 }
 
+// Try to dynamically import the registry
+let registryTools: any[] = [];
+
+// Helper function to safely load registry tools
+async function loadRegistryTools(registryPath?: string) {
+  try {
+    // If registry path is not provided, try standard locations
+    if (!registryPath) {
+      // Check common locations
+      const possiblePaths = [
+        // Relative to the current project
+        path.resolve(process.cwd(), '../services/tools/registry.ts'),
+        path.resolve(process.cwd(), '../services/tools/registry.js'),
+        path.resolve(process.cwd(), 'services/tools/registry.ts'),
+        path.resolve(process.cwd(), 'services/tools/registry.js'),
+        
+        // Absolute paths for common locations
+        '/Users/simon/Documents/GitHub/starterkit/services/tools/registry.ts'
+      ];
+      
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          registryPath = p;
+          break;
+        }
+      }
+    }
+    
+    if (registryPath && fs.existsSync(registryPath)) {
+      console.log(`Found registry at ${registryPath}`);
+      
+      // For TypeScript files, we can't directly import them in Node.js
+      // Instead, we'll read the file content to extract tool information
+      const content = fs.readFileSync(registryPath, 'utf8');
+      
+      // Extract tool names and descriptions using regex
+      const toolRegex = /export const (\w+)Tool.*?description: "(.*?)"/gs;
+      const toolsInfo = [];
+      let match;
+      
+      while ((match = toolRegex.exec(content)) !== null) {
+        const [_, name, description] = match;
+        toolsInfo.push({ name: `${name}Tool`, description });
+      }
+      
+      if (toolsInfo.length > 0) {
+        console.log(`Found ${toolsInfo.length} tools in registry`);
+        return toolsInfo;
+      }
+      
+      // If regex fails, try to find the tools array directly
+      const toolsArrayMatch = /export const tools = \[([\s\S]*?)\];/g.exec(content);
+      if (toolsArrayMatch && toolsArrayMatch[1]) {
+        const toolNames = toolsArrayMatch[1].match(/(\w+)Tool/g);
+        if (toolNames) {
+          console.log(`Found tools array with ${toolNames.length} tools`);
+          return toolNames.map(name => ({ name, description: "A design system tool" }));
+        }
+      }
+    }
+    
+    console.log("Could not load registry tools, using default information");
+    return [
+      { name: "componentDocTool", description: "Get documentation for a specific design system component" },
+      { name: "componentCodeTool", description: "Get code examples for a specific design system component" },
+      { name: "getStartedTool", description: "Get getting started information for the design system" },
+      { name: "changeLogTool", description: "Get change log information for design system components" },
+      { name: "cssOnlyTool", description: "Get CSS-only implementation details for components" },
+      { name: "migrationGuideTool", description: "Get migration guides for components" },
+      { name: "writeFileTool", description: "Write content to a file" },
+      { name: "readFileTool", description: "Read content from a file" },
+      { name: "webSearchTool", description: "Search the web for design system related information" },
+      { name: "blogTool", description: "Get blog posts from the design system" },
+      { name: "basicsTool", description: "Get basic information about the design system" },
+      { name: "goodPracticeTool", description: "Get good practice guidelines from the design system" },
+      { name: "uxPatternsTool", description: "Get UX pattern information from the design system" },
+      { name: "designChangesTool", description: "Get information about design changes in the system" },
+      { name: "timeTool", description: "Get current time information" },
+      { name: "weatherTool", description: "Get weather information for a specific location" }
+    ];
+  } catch (err) {
+    console.error("Error loading registry tools:", err);
+    return [];
+  }
+}
+
+/**
+ * Start an MCP server with a designbot-chat tool
+ */
 export async function startMcpServer(options: McpServerOptions = {}) {
   const {
-    name = "DesignsystemetMCP",
+    name = "DesignBot",
     version = "0.1.0",
-    tools = simpleTools,
-    openaiApiKey
+    openaiApiKey,
+    registryPath
   } = options;
+
+  // Load registry tools information
+  const tools = await loadRegistryTools(registryPath);
+  console.log(`Loaded ${tools.length} tools from registry`);
 
   // Create server
   const server = new McpServer({
@@ -66,81 +122,23 @@ export async function startMcpServer(options: McpServerOptions = {}) {
     version
   });
 
-  // Initialize OpenAI if API key is provided
+  // Initialize OpenAI - required for the service to function
   let openaiClient: OpenAI | undefined;
   if (openaiApiKey) {
     openaiClient = new OpenAI({
       apiKey: openaiApiKey,
     });
+  } else {
+    console.warn("No OpenAI API key provided. Chat functionality will be disabled.");
   }
 
-  // Register tools
-  tools.forEach(tool => {
-    try {
-      // Extract schema definition and convert to Zod schema
-      const schemaProperties = tool.function.parameters.properties || {};
-      const schemaRequired: string[] = tool.function.parameters.required || [];
-      
-      // Create a Zod schema from the OpenAI tool schema
-      const zodSchema: Record<string, any> = {};
-      
-      for (const [key, value] of Object.entries(schemaProperties)) {
-        const isRequired = schemaRequired.includes(key);
-        const propertyValue = value as { type?: string; items?: any };
-        
-        // Map JSON Schema types to Zod schema
-        if (propertyValue.type === "string") {
-          zodSchema[key] = isRequired ? z.string() : z.string().optional();
-        } else if (propertyValue.type === "number") {
-          zodSchema[key] = isRequired ? z.number() : z.number().optional();
-        } else if (propertyValue.type === "boolean") {
-          zodSchema[key] = isRequired ? z.boolean() : z.boolean().optional();
-        } else if (propertyValue.type === "array") {
-          zodSchema[key] = isRequired ? z.array(z.any()) : z.array(z.any()).optional();
-        } else {
-          // Default to allowing any for unknown types
-          zodSchema[key] = isRequired ? z.any() : z.any().optional();
-        }
-      }
-      
-      // Register the tool with MCP
-      server.tool(
-        tool.function.name,
-        zodSchema,
-        async (args: any) => {
-          try {
-            // Execute the tool function
-            const result = await tool.function.function(args);
-            
-            return {
-              content: [{ 
-                type: "text", 
-                text: typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result) 
-              }]
-            };
-          } catch (error: any) {
-            console.error(`Error executing tool ${tool.function.name}:`, error);
-            return {
-              content: [{ 
-                type: "text", 
-                text: `Error: ${error.message}` 
-              }],
-              isError: true
-            };
-          }
-        }
-      );
-      
-      console.log(`Registered tool: ${tool.function.name}`);
-    } catch (error) {
-      console.error(`Failed to register tool ${tool.function.name}:`, error);
-    }
-  });
+  // Generate tools info for the system prompt
+  const toolsInfo = tools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n');
 
-  // Add a simple chat completion tool if OpenAI is available
+  // Add the designbot-chat tool if OpenAI client is available
   if (openaiClient) {
     server.tool(
-      "chat",
+      "designbot-chat",
       { 
         message: z.string(),
         systemPrompt: z.string().optional()
@@ -150,18 +148,32 @@ export async function startMcpServer(options: McpServerOptions = {}) {
           // Build messages array
           const messages = [];
           
-          // Add system prompt if provided
+          // Add system prompt if provided, otherwise use default with tools info
           if (systemPrompt) {
             messages.push({
               role: "system" as const,
               content: systemPrompt
             });
           } else {
-            // Default system prompt
+            // Default system prompt with tools info
             messages.push({
               role: "system" as const,
               content: `
-              You are a helpful and knowledgeable worker for designsystemet.no. Your role is to help users by providing short and concise answers with links and examples where needed. Always refer to official documentation and the codebase when addressing questions about components, and never make assumptions about the user's intent—always consult the available tools for precise information.
+              You are a helpful assistant for designers and developers using the designsystemet.no design system.
+              
+              Your role is to help users by providing clear, accurate answers about design system components, guidelines, and best practices.
+              Be concise but thorough, and include links to relevant documentation when appropriate.
+              When discussing components, explain their purpose, usage guidelines, and provide code examples if relevant.
+              
+              Always strive to give actionable advice and practical solutions. If you don't know something specific about the design system, 
+              be honest about it and suggest where the user might find that information.
+              
+              The design system is a comprehensive resource for creating consistent, accessible, and user-friendly digital experiences.
+              
+              The design system includes the following tools in its registry:
+              ${toolsInfo}
+              
+              When users ask about these tools or functionality, you can tell them about these capabilities of the design system.
               `
             });
           }
@@ -174,7 +186,7 @@ export async function startMcpServer(options: McpServerOptions = {}) {
           
           // Call OpenAI API
           const response = await openaiClient.chat.completions.create({
-            model: 'gpt-4o',
+            model: 'gpt-4o', // Use latest GPT-4o model
             messages,
             temperature: 0.7,
             max_tokens: 2000
@@ -199,7 +211,7 @@ export async function startMcpServer(options: McpServerOptions = {}) {
       }
     );
     
-    console.log("Registered chat tool");
+    console.log("Registered designbot-chat tool");
   }
 
   // Add a help resource
@@ -209,12 +221,9 @@ export async function startMcpServer(options: McpServerOptions = {}) {
     async (uri: URL) => ({
       contents: [{
         uri: uri.href,
-        text: `Designsystemet MCP Server
+        text: `DesignBot MCP Server
 
-Available Tools:
-${tools.map(t => `- ${t.function.name}: ${t.function.description}`).join('\n')}
-${openaiClient ? '- chat: Send a chat message using OpenAI\n' : ''}
-To get started, try one of the available tools.
+${openaiClient ? 'Tool: designbot-chat\n\nUse the designbot-chat tool to ask questions about the design system.\n\nExample:\ndesignbot-chat(message: "What is the Button component used for?")\n\nThe chat assistant has knowledge of these design system tools:\n' + toolsInfo : 'No tools available. Please provide an OpenAI API key to enable the designbot-chat tool.'}
 `
       }]
     })
