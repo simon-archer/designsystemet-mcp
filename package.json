@@ -1,0 +1,43 @@
+{
+  "name": "@simon-archer/designsystemet-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol (MCP) server for the Designsystemet.no tools",
+  "main": "dist/index.js",
+  "bin": {
+    "designsystemet-mcp": "bin/designsystemet-mcp.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node bin/designsystemet-mcp.js",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"No tests yet\""
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "designsystemet",
+    "ai",
+    "llm"
+  ],
+  "author": "Simon Archer",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.7.0",
+    "openai": "^4.28.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "typescript": "^5.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
