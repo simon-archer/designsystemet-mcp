@@ -2,71 +2,48 @@
 
 [![npm version](https://img.shields.io/npm/v/@simon-archer/designbot-mcp.svg)](https://www.npmjs.com/package/@simon-archer/designbot-mcp)
 
-A simple [MCP (Model Context Protocol)](https://github.com/modelcontextprotocol/modelcontextprotocol) server providing access to a design system assistant.
-
-## Installation
-
-```bash
-npm install -g @simon-archer/designbot-mcp
-```
+A lightweight [MCP (Model Context Protocol)](https://github.com/modelcontextprotocol/modelcontextprotocol) server that forwards messages to the designbot.deno.dev/chat endpoint. This allows you to access the Designsystemet assistant through any MCP-compatible client like Windsurf, Cursor or Claude.
 
 ## Usage
 
-### Command Line
+### With Windsurf or Cursor
 
-Run the MCP server from the command line:
-
-```bash
-# Using environment variable for API key
-OPENAI_API_KEY=your_api_key designbot-mcp
-
-# Or using command-line parameter
-designbot-mcp --api-key your_api_key
-```
-
-### With Codeium Windsurf
-
-Add this to your Windsurf config:
+Add this to your `mcp_config.json` file:
 
 ```json
 {
   "mcpServers": {
-    "designsystem": {
+    "Designbot": {
       "command": "npx",
-      "args": ["-y", "@simon-archer/designbot-mcp"],
-      "env": {
-        "OPENAI_API_KEY": "your_openai_key_here"
-      },
-      "description": "AI assistant for Designsystemet.no design system. Use designbot-chat(message: \"your question\") to ask about components, design patterns, accessibility, implementation details, or best practices."
+      "args": [
+        "-y",
+        "@simon-archer/designbot-mcp"
+      ]
     }
   }
 }
 ```
 
-Then use it with Windsurf:
+Then use it with Windsurf or Cursor (sometimes invocations requires custom prompting):
 
 ```bash
-windsurf chat -m designsystem "Tell me about the Button component"
-```
-
-### With Claude Code
-
-```bash
-claude code -m mcp://?program=npx&args=-y,@simon-archer/designbot-mcp -s "Tell me about the Button component"
+Ask the designbot how to use the Button from the design system
 ```
 
 ## Available Tool
 
 The MCP server provides a single tool:
 
-- `designbot-chat`: Ask questions about the design system (requires OpenAI API key)
+- `designbot-chat`: Forwards messages to the designbot.deno.dev/chat endpoint
+
+This tool is a wrapper to get access to the [Designbot](https://designbot.deno.dev/), inside your IDE.
 
 ### Example Usage
 
 ```
-designbot-chat(message: "What are the main components in the design system?")
-designbot-chat(message: "How do I implement the Button component?", systemPrompt: "Be very concise")
-designbot-chat(message: "Tell me about accessibility in the design system")
+"What are the main components in the design system? Ask Designbot"
+"How do I implement the Button component? Ask Designbot"
+"Tell me about accessibility in the design system, Ask Designbot"
 ```
 
 ## API
@@ -76,11 +53,21 @@ You can also use this package programmatically in your Node.js applications:
 ```javascript
 import { startMcpServer } from '@simon-archer/designbot-mcp';
 
-// Start an MCP server with the designbot-chat tool
+// Start an MCP server
 await startMcpServer({
-  openaiApiKey: process.env.OPENAI_API_KEY
+  name: "DesignBot", // Optional
+  version: "1.0.0"   // Optional
 });
 ```
+
+## How It Works
+
+This MCP server:
+
+1. Receives messages through the MCP protocol
+2. Forwards them to the designbot.deno.dev/chat endpoint
+3. Processes the server-sent events (SSE) response
+4. Returns the formatted response back to the MCP client
 
 ## License
 

@@ -1,10 +1,11 @@
 {
-  "name": "@simon-archer/designsystemet-mcp",
-  "version": "0.2.0",
-  "description": "Model Context Protocol (MCP) server for the Designsystemet.no tools",
+  "name": "@simon-archer/designbot-mcp",
+  "version": "0.3.3",
+  "description": "A lightweight MCP proxy server for designbot.deno.dev/chat",
   "main": "dist/index.js",
+  "type": "commonjs",
   "bin": {
-    "designsystemet-mcp": "bin/designsystemet-mcp.js"
+    "designbot-mcp": "bin/designbot-mcp.js"
   },
   "files": [
     "dist",
@@ -12,7 +13,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "start": "node bin/designsystemet-mcp.js",
+    "start": "node bin/designbot-mcp.js",
     "prepublishOnly": "npm run build",
     "test": "echo \"No tests yet\""
   },
@@ -21,13 +22,13 @@
     "model-context-protocol",
     "designsystemet",
     "ai",
-    "llm"
+    "llm",
+    "proxy"
   ],
   "author": "Simon Archer",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
-    "openai": "^4.28.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

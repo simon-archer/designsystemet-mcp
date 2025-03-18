@@ -1,244 +1,155 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
-import OpenAI from 'openai';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import * as z from 'zod';
 
 // Server options interface
 export interface McpServerOptions {
   name?: string;
   version?: string;
-  openaiApiKey?: string;
-  registryPath?: string;
-}
-
-// Try to dynamically import the registry
-let registryTools: any[] = [];
-
-// Helper function to safely load registry tools
-async function loadRegistryTools(registryPath?: string) {
-  try {
-    // If registry path is not provided, try standard locations
-    if (!registryPath) {
-      // Check common locations
-      const possiblePaths = [
-        // Relative to the current project
-        path.resolve(process.cwd(), '../services/tools/registry.ts'),
-        path.resolve(process.cwd(), '../services/tools/registry.js'),
-        path.resolve(process.cwd(), 'services/tools/registry.ts'),
-        path.resolve(process.cwd(), 'services/tools/registry.js'),
-        
-        // Absolute paths for common locations
-        '/Users/simon/Documents/GitHub/starterkit/services/tools/registry.ts'
-      ];
-      
-      for (const p of possiblePaths) {
-        if (fs.existsSync(p)) {
-          registryPath = p;
-          break;
-        }
-      }
-    }
-    
-    if (registryPath && fs.existsSync(registryPath)) {
-      console.log(`Found registry at ${registryPath}`);
-      
-      // For TypeScript files, we can't directly import them in Node.js
-      // Instead, we'll read the file content to extract tool information
-      const content = fs.readFileSync(registryPath, 'utf8');
-      
-      // Extract tool names and descriptions using regex
-      const toolRegex = /export const (\w+)Tool.*?description: "(.*?)"/gs;
-      const toolsInfo = [];
-      let match;
-      
-      while ((match = toolRegex.exec(content)) !== null) {
-        const [_, name, description] = match;
-        toolsInfo.push({ name: `${name}Tool`, description });
-      }
-      
-      if (toolsInfo.length > 0) {
-        console.log(`Found ${toolsInfo.length} tools in registry`);
-        return toolsInfo;
-      }
-      
-      // If regex fails, try to find the tools array directly
-      const toolsArrayMatch = /export const tools = \[([\s\S]*?)\];/g.exec(content);
-      if (toolsArrayMatch && toolsArrayMatch[1]) {
-        const toolNames = toolsArrayMatch[1].match(/(\w+)Tool/g);
-        if (toolNames) {
-          console.log(`Found tools array with ${toolNames.length} tools`);
-          return toolNames.map(name => ({ name, description: "A design system tool" }));
-        }
-      }
-    }
-    
-    console.log("Could not load registry tools, using default information");
-    return [
-      { name: "componentDocTool", description: "Get documentation for a specific design system component" },
-      { name: "componentCodeTool", description: "Get code examples for a specific design system component" },
-      { name: "getStartedTool", description: "Get getting started information for the design system" },
-      { name: "changeLogTool", description: "Get change log information for design system components" },
-      { name: "cssOnlyTool", description: "Get CSS-only implementation details for components" },
-      { name: "migrationGuideTool", description: "Get migration guides for components" },
-      { name: "writeFileTool", description: "Write content to a file" },
-      { name: "readFileTool", description: "Read content from a file" },
-      { name: "webSearchTool", description: "Search the web for design system related information" },
-      { name: "blogTool", description: "Get blog posts from the design system" },
-      { name: "basicsTool", description: "Get basic information about the design system" },
-      { name: "goodPracticeTool", description: "Get good practice guidelines from the design system" },
-      { name: "uxPatternsTool", description: "Get UX pattern information from the design system" },
-      { name: "designChangesTool", description: "Get information about design changes in the system" },
-      { name: "timeTool", description: "Get current time information" },
-      { name: "weatherTool", description: "Get weather information for a specific location" }
-    ];
-  } catch (err) {
-    console.error("Error loading registry tools:", err);
-    return [];
-  }
 }
 
 /**
  * Start an MCP server with a designbot-chat tool
  */
 export async function startMcpServer(options: McpServerOptions = {}) {
+  // Log when server is starting
+  console.log("Designbot MCP server starting...");
+  
   const {
     name = "DesignBot",
     version = "0.1.0",
-    openaiApiKey,
-    registryPath
   } = options;
 
-  // Load registry tools information
-  const tools = await loadRegistryTools(registryPath);
-  console.log(`Loaded ${tools.length} tools from registry`);
-
-  // Create server
-  const server = new McpServer({
-    name,
-    version
-  });
-
-  // Initialize OpenAI - required for the service to function
-  let openaiClient: OpenAI | undefined;
-  if (openaiApiKey) {
-    openaiClient = new OpenAI({
-      apiKey: openaiApiKey,
+  try {
+    // Create server
+    const server = new McpServer({
+      name,
+      version
     });
-  } else {
-    console.warn("No OpenAI API key provided. Chat functionality will be disabled.");
-  }
 
-  // Generate tools info for the system prompt
-  const toolsInfo = tools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n');
-
-  // Add the designbot-chat tool if OpenAI client is available
-  if (openaiClient) {
+    // Add chat proxy tool
     server.tool(
       "designbot-chat",
       { 
-        message: z.string(),
-        systemPrompt: z.string().optional()
+        message: z.string()
       },
-      async ({ message, systemPrompt }: { message: string, systemPrompt?: string }) => {
+      async ({ message }) => {
         try {
-          // Build messages array
-          const messages = [];
+          // Forward the message to designbot.deno.dev/chat
+          const response = await fetch("https://designbot.deno.dev/chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ message }),
+          });
+
+          // Get the response as text
+          const text = await response.text();
           
-          // Add system prompt if provided, otherwise use default with tools info
-          if (systemPrompt) {
-            messages.push({
-              role: "system" as const,
-              content: systemPrompt
-            });
+          // Try to extract the response text
+          let finalText = "";
+          
+          // If it looks like SSE data, try to parse it
+          if (text.includes("data: {")) {
+            console.log("Detected SSE response format");
+            const lines = text.split("\n");
+            
+            // First, try finding the complete assistant message (non-partial)
+            const finalMessagePattern = /"role":"assistant","content":"([^"]*)","refusal":null,"parsed":null,"isPartial":false/;
+            const match = text.match(finalMessagePattern);
+            
+            if (match && match[1]) {
+              // Found the final message, unescape special characters
+              finalText = match[1].replace(/\\n/g, '\n')
+                                .replace(/\\"/g, '"')
+                                .replace(/\\\\/g, '\\');
+              console.log("Found final message in SSE stream");
+            } else {
+              // If no final message found, try to collect all assistant content chunks
+              console.log("No final message found, trying to collect chunks...");
+              for (const line of lines) {
+                if (line.startsWith("data: ")) {
+                  try {
+                    const data = JSON.parse(line.substring(6));
+                    if (data.role === 'assistant' && data.content) {
+                      finalText += data.content;
+                      console.log("Added assistant content chunk");
+                    } else if (data.response) {
+                      finalText += data.response;
+                      console.log("Added response chunk");
+                    }
+                  } catch (e) {
+                    // Ignore parsing errors
+                    console.log("Error parsing SSE chunk:", e);
+                  }
+                }
+              }
+            }
           } else {
-            // Default system prompt with tools info
-            messages.push({
-              role: "system" as const,
-              content: `
-              You are a helpful assistant for designers and developers using the designsystemet.no design system.
-              
-              Your role is to help users by providing clear, accurate answers about design system components, guidelines, and best practices.
-              Be concise but thorough, and include links to relevant documentation when appropriate.
-              When discussing components, explain their purpose, usage guidelines, and provide code examples if relevant.
-              
-              Always strive to give actionable advice and practical solutions. If you don't know something specific about the design system, 
-              be honest about it and suggest where the user might find that information.
-              
-              The design system is a comprehensive resource for creating consistent, accessible, and user-friendly digital experiences.
-              
-              The design system includes the following tools in its registry:
-              ${toolsInfo}
-              
-              When users ask about these tools or functionality, you can tell them about these capabilities of the design system.
-              `
-            });
+            // Try to parse as JSON
+            try {
+              const json = JSON.parse(text);
+              if (json.response) {
+                finalText = json.response;
+              }
+            } catch (e) {
+              // If all else fails, just return the raw text
+              finalText = text;
+            }
           }
           
-          // Add user message
-          messages.push({
-            role: "user" as const,
-            content: message
-          });
-          
-          // Call OpenAI API
-          const response = await openaiClient.chat.completions.create({
-            model: 'gpt-4o', // Use latest GPT-4o model
-            messages,
-            temperature: 0.7,
-            max_tokens: 2000
-          });
-          
-          // Extract and return the response text
-          const responseText = response.choices[0]?.message?.content || "No response generated";
+          // If we don't have a response, add a fallback message
+          if (!finalText) {
+            console.log("No text extracted from response, using fallback message");
+            finalText = "I couldn't get information about that from the design system. Please check the documentation or try a different query.";
+          } else {
+            console.log(`Extracted ${finalText.length} chars of response text`);
+          }
           
           return {
-            content: [{ type: "text", text: responseText }]
+            content: [{ type: "text", text: finalText }]
           };
-        } catch (error: any) {
-          console.error(`Error in chat completion:`, error);
+        } catch (error) {
           return {
             content: [{ 
               type: "text", 
-              text: `Error: ${error.message}` 
+              text: `Error: ${error instanceof Error ? error.message : String(error)}` 
             }],
             isError: true
           };
         }
       }
     );
-    
-    console.log("Registered designbot-chat tool");
-  }
 
-  // Add a help resource
-  server.resource(
-    "help",
-    "designsystem://help",
-    async (uri: URL) => ({
-      contents: [{
-        uri: uri.href,
-        text: `DesignBot MCP Server
+    // Add help resource
+    server.resource(
+      "help",
+      "designsystem://help",
+      async (uri) => ({
+        contents: [{
+          uri: uri.href,
+          text: `DesignBot MCP Server
 
-${openaiClient ? 'Tool: designbot-chat\n\nUse the designbot-chat tool to ask questions about the design system.\n\nExample:\ndesignbot-chat(message: "What is the Button component used for?")\n\nThe chat assistant has knowledge of these design system tools:\n' + toolsInfo : 'No tools available. Please provide an OpenAI API key to enable the designbot-chat tool.'}
+Available Tools:
+- designbot-chat: Forward a chat message to designbot.deno.dev/chat
+
+To get started, try using the designbot-chat tool:
+\`\`\`
+designbot-chat(message: "Tell me about the Button component")
+\`\`\`
 `
-      }]
-    })
-  );
+        }]
+      })
+    );
 
-  // Start the server
-  console.log("Starting MCP server...");
-  const transport = new StdioServerTransport();
-
-  try {
+    // Start the server
+    const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.log("MCP server running and ready for requests");
+    
     return server;
   } catch (error) {
-    console.error("Failed to start MCP server:", error);
+    console.error("MCP Server error:", error);
     throw error;
   }
 }
