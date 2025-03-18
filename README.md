@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@simon-archer/designbot-mcp.svg)](https://www.npmjs.com/package/@simon-archer/designbot-mcp)
 
-A lightweight [MCP (Model Context Protocol)](https://github.com/modelcontextprotocol/modelcontextprotocol) server that forwards messages to the designbot.deno.dev/chat endpoint. This allows you to access the Designsystemet assistant through any MCP-compatible client like Windsurf, Cursor or Claude.
+A lightweight [MCP (Model Context Protocol)](https://docs.anthropic.com/en/docs/agents-and-tools/mcp) server that forwards messages to the designbot.deno.dev/chat endpoint. This allows you to access the Designsystemet assistant through any MCP-compatible client like Windsurf, Cursor or Claude Code.
 
 ## Usage
 
