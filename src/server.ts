@@ -17,7 +17,7 @@ export async function startMcpServer(options: McpServerOptions = {}) {
   
   const {
     name = "DesignBot",
-    version = "0.1.0",
+    version = "0.7.1",
   } = options;
 
   try {
@@ -27,14 +27,24 @@ export async function startMcpServer(options: McpServerOptions = {}) {
       version
     });
 
-    // Add chat proxy tool
+    // Add chat proxy tool - cursor-specific version
     server.tool(
       "designbot-chat",
       { 
         message: z.string()
       },
-      async ({ message }) => {
+      async ({ message }, extra) => {
         try {
+          // Create an abort controller for the fetch request
+          const controller = new AbortController();
+          
+          // Listen for abort from MCP and propagate to fetch
+          if (extra && extra.signal) {
+            extra.signal.addEventListener('abort', () => {
+              controller.abort();
+            });
+          }
+          
           // Forward the message to designbot.deno.dev/chat
           const response = await fetch("https://designbot.deno.dev/chat", {
             method: "POST",
@@ -42,75 +52,26 @@ export async function startMcpServer(options: McpServerOptions = {}) {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ message }),
+            signal: controller.signal
           });
+          
+          // Check for valid response
+          if (!response.ok) {
+            throw new Error(`API responded with status ${response.status}: ${response.statusText}`);
+          }
 
-          // Get the response as text
-          const text = await response.text();
+          // Extract the final text from the response
+          const finalText = await getCompletedResponse(response);
           
-          // Try to extract the response text
-          let finalText = "";
-          
-          // If it looks like SSE data, try to parse it
-          if (text.includes("data: {")) {
-            console.log("Detected SSE response format");
-            const lines = text.split("\n");
-            
-            // First, try finding the complete assistant message (non-partial)
-            const finalMessagePattern = /"role":"assistant","content":"([^"]*)","refusal":null,"parsed":null,"isPartial":false/;
-            const match = text.match(finalMessagePattern);
-            
-            if (match && match[1]) {
-              // Found the final message, unescape special characters
-              finalText = match[1].replace(/\\n/g, '\n')
-                                .replace(/\\"/g, '"')
-                                .replace(/\\\\/g, '\\');
-              console.log("Found final message in SSE stream");
-            } else {
-              // If no final message found, try to collect all assistant content chunks
-              console.log("No final message found, trying to collect chunks...");
-              for (const line of lines) {
-                if (line.startsWith("data: ")) {
-                  try {
-                    const data = JSON.parse(line.substring(6));
-                    if (data.role === 'assistant' && data.content) {
-                      finalText += data.content;
-                      console.log("Added assistant content chunk");
-                    } else if (data.response) {
-                      finalText += data.response;
-                      console.log("Added response chunk");
-                    }
-                  } catch (e) {
-                    // Ignore parsing errors
-                    console.log("Error parsing SSE chunk:", e);
-                  }
-                }
-              }
-            }
-          } else {
-            // Try to parse as JSON
-            try {
-              const json = JSON.parse(text);
-              if (json.response) {
-                finalText = json.response;
-              }
-            } catch (e) {
-              // If all else fails, just return the raw text
-              finalText = text;
-            }
-          }
-          
-          // If we don't have a response, add a fallback message
-          if (!finalText) {
-            console.log("No text extracted from response, using fallback message");
-            finalText = "I couldn't get information about that from the design system. Please check the documentation or try a different query.";
-          } else {
-            console.log(`Extracted ${finalText.length} chars of response text`);
-          }
-          
+          // Return as simple text - no streaming at all
           return {
-            content: [{ type: "text", text: finalText }]
+            content: [{ 
+              type: "text", 
+              text: finalText
+            }]
           };
         } catch (error) {
+          console.error("MCP tool error:", error);
           return {
             content: [{ 
               type: "text", 
@@ -151,5 +112,79 @@ designbot-chat(message: "Tell me about the Button component")
   } catch (error) {
     console.error("MCP Server error:", error);
     throw error;
+  }
+}
+
+/**
+ * Wait for and extract the complete response
+ */
+async function getCompletedResponse(response: Response): Promise<string> {
+  // Get the response text as a string
+  const text = await response.text();
+  
+  try {
+    // Try to directly parse as JSON first
+    if (!text.includes("data: ")) {
+      const data = JSON.parse(text);
+      if (data.response) {
+        return data.response;
+      }
+    }
+    
+    // If it's streaming data, get the last complete chunk with the most content
+    let bestMatch = "";
+    const chunks = text.split("data: ");
+    
+    for (const chunk of chunks) {
+      if (!chunk.trim()) continue;
+      
+      try {
+        // Try to parse the chunk as JSON
+        let parsedData: any;
+        
+        // Some chunks might have trailing newlines
+        const trimmedChunk = chunk.trim();
+        
+        // Only process valid JSON chunks
+        if (trimmedChunk.startsWith("{") && trimmedChunk.endsWith("}")) {
+          parsedData = JSON.parse(trimmedChunk);
+          
+          // Look for the complete response in various formats
+          let content = "";
+          
+          if (parsedData.role === "assistant" && !parsedData.isPartial && parsedData.content) {
+            // This is a complete message
+            content = parsedData.content;
+          } else if (parsedData.role === "assistant" && parsedData.content) {
+            // This is a partial message, but might be the most complete one
+            content = parsedData.content;
+          } else if (parsedData.response) {
+            // Legacy format
+            content = parsedData.response;
+          }
+          
+          // Keep the longest/most complete response
+          if (content.length > bestMatch.length) {
+            bestMatch = content;
+          }
+        }
+      } catch (e) {
+        // Ignore parsing errors for individual chunks
+      }
+    }
+    
+    // If we found any valid content, return it
+    if (bestMatch) {
+      // Unescape any special characters from the JSON
+      return bestMatch
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+    }
+    
+    // If all else fails, return an error message
+    return "Could not extract response from the design system. Please try again.";
+  } catch (error) {
+    return `Error processing response: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
