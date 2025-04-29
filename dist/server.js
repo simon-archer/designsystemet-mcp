@@ -51,9 +51,11 @@ async function startMcpServer(options = {}) {
             version
         });
         // Add chat proxy tool - cursor-specific version
-        server.tool("designbot-chat", {
-            message: z.string()
-        }, async ({ message }, extra) => {
+        server.tool("Ask-designbot", "Asks questions to the Designsystemet AI assistant (Designbot). You can ask about components, their usage, accessibility, get code examples (React, HTML), CSS styles, or discuss design guidelines and tokens.", {
+            parameters: z.object({
+                message: z.string().describe("The question to ask Designbot about Designsystemet."),
+            }),
+        }, async ({ parameters: { message } }, extra) => {
             try {
                 // Create an abort controller for the fetch request
                 const controller = new AbortController();
@@ -98,17 +100,17 @@ async function startMcpServer(options = {}) {
             }
         });
         // Add help resource
-        server.resource("help", "designsystem://help", async (uri) => ({
+        server.resource("help", "designsystem://help", (uri) => ({
             contents: [{
                     uri: uri.href,
                     text: `DesignBot MCP Server
 
 Available Tools:
-- designbot-chat: Forward a chat message to designbot.deno.dev/chat
+- Ask-designbot: Asks questions to the Designsystemet AI assistant (Designbot). You can ask about components, their usage, accessibility, get code examples (React, HTML), CSS styles, or discuss design guidelines and tokens.
 
-To get started, try using the designbot-chat tool:
+To get started, try using the Ask-designbot tool:
 \`\`\`
-designbot-chat(message: "Tell me about the Button component")
+Ask-designbot(message: "Tell me about the Button component")
 \`\`\`
 `
                 }]
@@ -116,6 +118,9 @@ designbot-chat(message: "Tell me about the Button component")
         // Start the server
         const transport = new stdio_js_1.StdioServerTransport();
         await server.connect(transport);
+        // Removed onError assignment; errors will bubble up from connect
+        console.log(`MCP Server ${name} v${version} started`);
+        console.log(`Process ID: ${Deno.pid}`);
         return server;
     }
     catch (error) {
@@ -145,33 +150,29 @@ async function getCompletedResponse(response) {
                 continue;
             try {
                 // Try to parse the chunk as JSON
-                let parsedData;
-                // Some chunks might have trailing newlines
-                const trimmedChunk = chunk.trim();
-                // Only process valid JSON chunks
-                if (trimmedChunk.startsWith("{") && trimmedChunk.endsWith("}")) {
-                    parsedData = JSON.parse(trimmedChunk);
-                    // Look for the complete response in various formats
-                    let content = "";
-                    if (parsedData.role === "assistant" && !parsedData.isPartial && parsedData.content) {
-                        // This is a complete message
-                        content = parsedData.content;
-                    }
-                    else if (parsedData.role === "assistant" && parsedData.content) {
-                        // This is a partial message, but might be the most complete one
-                        content = parsedData.content;
-                    }
-                    else if (parsedData.response) {
-                        // Legacy format
-                        content = parsedData.response;
-                    }
-                    // Keep the longest/most complete response
-                    if (content.length > bestMatch.length) {
-                        bestMatch = content;
-                    }
+                // parsedData typed as unknown for stricter type safety
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                let parsedData = JSON.parse(chunk.trim());
+                // Look for the complete response in various formats
+                let content = "";
+                if (parsedData.role === "assistant" && !parsedData.isPartial && parsedData.content) {
+                    // This is a complete message
+                    content = parsedData.content;
+                }
+                else if (parsedData.role === "assistant" && parsedData.content) {
+                    // This is a partial message, but might be the most complete one
+                    content = parsedData.content;
+                }
+                else if (parsedData.response) {
+                    // Legacy format
+                    content = parsedData.response;
+                }
+                // Keep the longest/most complete response
+                if (content.length > bestMatch.length) {
+                    bestMatch = content;
                 }
             }
-            catch (e) {
+            catch (_e) {
                 // Ignore parsing errors for individual chunks
             }
         }
@@ -189,4 +190,12 @@ async function getCompletedResponse(response) {
     catch (error) {
         return `Error processing response: ${error instanceof Error ? error.message : String(error)}`;
     }
+}
+// Start the server
+try {
+    await startMcpServer();
+}
+catch (e) {
+    console.error("Failed to start MCP server:", e);
+    Deno.exit(1); // Exit if server fails to start
 }

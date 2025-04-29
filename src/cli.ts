@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { startMcpServer } from './server';
+import process from 'node:process';
+import { startMcpServer } from './server.ts';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
@@ -24,13 +25,7 @@ Example:
   }
 }
 
-// Start the server
-(async () => {
-  try {
-    await startMcpServer({
-    });
-  } catch (error) {
-    console.error('Failed to start MCP server:', error);
-    process.exit(1);
-  }
-})();
+// Start the MCP server
+startMcpServer();
+
+console.log("DesignBot MCP Server started.");

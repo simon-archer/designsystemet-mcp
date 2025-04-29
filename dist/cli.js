@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const server_1 = require("./server");
+const node_process_1 = __importDefault(require("node:process"));
+const server_ts_1 = require("./server.ts");
 // Parse command-line arguments
-const args = process.argv.slice(2);
+const args = node_process_1.default.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
     if (args[i] === '--help') {
         console.log(`
@@ -20,16 +24,9 @@ Features:
 Example:
   designbot-mcp
 `);
-        process.exit(0);
+        node_process_1.default.exit(0);
     }
 }
-// Start the server
-(async () => {
-    try {
-        await (0, server_1.startMcpServer)({});
-    }
-    catch (error) {
-        console.error('Failed to start MCP server:', error);
-        process.exit(1);
-    }
-})();
+// Start the MCP server
+(0, server_ts_1.startMcpServer)();
+console.log("DesignBot MCP Server started.");
