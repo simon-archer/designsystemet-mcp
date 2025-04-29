@@ -65,7 +65,7 @@ Ask the designbot how to use the Accordion component
 
 The MCP server provides a single tool:
 
-- `Ask-designbot`: Forwards messages to the configured `/chat` endpoint (defaults to `https://designbot.deno.dev/chat` or your local Fresh server). Supports sub-queries:
+- `Ask-designbot`: Forwards messages to the configured `/chat` endpoint at `https://designbot.deno.dev/`. Supports sub-queries:
   - **getComponentDoc**: Component docs and usage examples
   - **getComponentCode**: React/HTML code snippets
   - **getCssCode**: CSS-only implementations
