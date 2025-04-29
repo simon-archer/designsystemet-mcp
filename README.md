@@ -30,6 +30,32 @@ Then use it with Windsurf or Cursor (sometimes invocations requires custom promp
 Ask the designbot how to use the Button from the design system
 ```
 
+### With VSCode
+
+To use the DesignBot MCP server with VSCode, you'll typically need an extension that supports the Model Context Protocol (MCP). Configure the MCP server in your VSCode settings (`.vscode/settings.json` or user settings).
+
+Here's an example configuration, though the specific setting key (e.g., `mcp.servers`) might vary depending on the extension you use:
+
+```json
+{
+  "mcp.servers": { // Adjust this key based on your VSCode MCP extension
+    "Designbot": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@simon-archer/designbot-mcp"
+      ]
+    }
+  }
+}
+```
+
+Once configured, you should be able to interact with the Designbot through your MCP-compatible VSCode extension, similar to the Windsurf/Cursor example:
+
+```bash
+Ask the designbot how to use the Accordion component
+```
+
 ## Available Tool
 
 The MCP server provides a single tool:
