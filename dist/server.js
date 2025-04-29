@@ -32,11 +32,15 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.startMcpServer = startMcpServer;
 const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
 const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
 const z = __importStar(require("zod"));
+const node_process_1 = __importDefault(require("node:process"));
 /**
  * Start an MCP server with a designbot-chat tool
  */
@@ -51,7 +55,17 @@ async function startMcpServer(options = {}) {
             version
         });
         // Add chat proxy tool - cursor-specific version
-        server.tool("Ask-designbot", "Asks questions to the Designsystemet AI assistant (Designbot). You can ask about components, their usage, accessibility, get code examples (React, HTML), CSS styles, or discuss design guidelines and tokens.", {
+        server.tool("Ask-designbot", `Asks questions to the Designsystemet AI assistant (Designbot). Supports sub-queries for specific functions:
+  • getComponentDoc (component docs and usage examples)
+  • getComponentCode (React/HTML code examples)
+  • getCssCode (CSS-only implementations)
+  • getStarted (onboarding and setup guides)
+  • getChangelog (version history)
+  • getBasics (core design concepts)
+  • getGoodPractice (implementation best practices)
+  • getUxPatterns (common UX patterns)
+  • getDesignModification (design tokens: colors, typography, spacing)
+  You can also ask about accessibility, theming, and design guidelines.`, {
             parameters: z.object({
                 message: z.string().describe("The question to ask Designbot about Designsystemet."),
             }),
@@ -118,9 +132,8 @@ Ask-designbot(message: "Tell me about the Button component")
         // Start the server
         const transport = new stdio_js_1.StdioServerTransport();
         await server.connect(transport);
-        // Removed onError assignment; errors will bubble up from connect
         console.log(`MCP Server ${name} v${version} started`);
-        console.log(`Process ID: ${Deno.pid}`);
+        console.log(`Process ID: ${node_process_1.default.pid}`);
         return server;
     }
     catch (error) {
@@ -150,29 +163,33 @@ async function getCompletedResponse(response) {
                 continue;
             try {
                 // Try to parse the chunk as JSON
-                // parsedData typed as unknown for stricter type safety
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                let parsedData = JSON.parse(chunk.trim());
-                // Look for the complete response in various formats
-                let content = "";
-                if (parsedData.role === "assistant" && !parsedData.isPartial && parsedData.content) {
-                    // This is a complete message
-                    content = parsedData.content;
-                }
-                else if (parsedData.role === "assistant" && parsedData.content) {
-                    // This is a partial message, but might be the most complete one
-                    content = parsedData.content;
-                }
-                else if (parsedData.response) {
-                    // Legacy format
-                    content = parsedData.response;
-                }
-                // Keep the longest/most complete response
-                if (content.length > bestMatch.length) {
-                    bestMatch = content;
+                let parsedData;
+                // Some chunks might have trailing newlines
+                const trimmedChunk = chunk.trim();
+                // Only process valid JSON chunks
+                if (trimmedChunk.startsWith("{") && trimmedChunk.endsWith("}")) {
+                    parsedData = JSON.parse(trimmedChunk);
+                    // Look for the complete response in various formats
+                    let content = "";
+                    if (parsedData.role === "assistant" && !parsedData.isPartial && parsedData.content) {
+                        // This is a complete message
+                        content = parsedData.content;
+                    }
+                    else if (parsedData.role === "assistant" && parsedData.content) {
+                        // This is a partial message, but might be the most complete one
+                        content = parsedData.content;
+                    }
+                    else if (parsedData.response) {
+                        // Legacy format
+                        content = parsedData.response;
+                    }
+                    // Keep the longest/most complete response
+                    if (content.length > bestMatch.length) {
+                        bestMatch = content;
+                    }
                 }
             }
-            catch (_e) {
+            catch (e) {
                 // Ignore parsing errors for individual chunks
             }
         }
@@ -192,10 +209,12 @@ async function getCompletedResponse(response) {
     }
 }
 // Start the server
-try {
-    await startMcpServer();
-}
-catch (e) {
-    console.error("Failed to start MCP server:", e);
-    Deno.exit(1); // Exit if server fails to start
-}
+(async () => {
+    try {
+        await startMcpServer();
+    }
+    catch (e) {
+        console.error("Failed to start MCP server:", e);
+        node_process_1.default.exit(1);
+    }
+})();

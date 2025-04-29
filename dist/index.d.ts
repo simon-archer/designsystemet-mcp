@@ -1,4 +1,4 @@
-import { startMcpServer } from './server.ts';
+import { startMcpServer } from './server';
 export { startMcpServer };
-export type { McpServerOptions } from './server.ts';
+export type { McpServerOptions } from './server';
 export default startMcpServer;

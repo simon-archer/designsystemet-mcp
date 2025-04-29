@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const node_process_1 = __importDefault(require("node:process"));
-const server_ts_1 = require("./server.ts");
+const server_1 = require("./server");
 // Parse command-line arguments
 const args = node_process_1.default.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
@@ -28,5 +28,5 @@ Example:
     }
 }
 // Start the MCP server
-(0, server_ts_1.startMcpServer)();
+(0, server_1.startMcpServer)();
 console.log("DesignBot MCP Server started.");

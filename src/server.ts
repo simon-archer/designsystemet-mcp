@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod';
+import process from 'node:process';
 
 // Server options interface
 export interface McpServerOptions {
@@ -30,7 +31,17 @@ export async function startMcpServer(options: McpServerOptions = {}) {
     // Add chat proxy tool - cursor-specific version
     server.tool(
       "Ask-designbot",
-      "Asks questions to the Designsystemet AI assistant (Designbot). You can ask about components, their usage, accessibility, get code examples (React, HTML), CSS styles, or discuss design guidelines and tokens.",
+      `Asks questions to the Designsystemet AI assistant (Designbot). Supports sub-queries for specific functions:
+  • getComponentDoc (component docs and usage examples)
+  • getComponentCode (React/HTML code examples)
+  • getCssCode (CSS-only implementations)
+  • getStarted (onboarding and setup guides)
+  • getChangelog (version history)
+  • getBasics (core design concepts)
+  • getGoodPractice (implementation best practices)
+  • getUxPatterns (common UX patterns)
+  • getDesignModification (design tokens: colors, typography, spacing)
+  You can also ask about accessibility, theming, and design guidelines.`,
       { 
         parameters: z.object({
           message: z.string().describe("The question to ask Designbot about Designsystemet."),
@@ -111,12 +122,8 @@ Ask-designbot(message: "Tell me about the Button component")
     const transport = new StdioServerTransport();
     await server.connect(transport);
     
-    server.onError = (error: Error) => {
-      console.error("MCP Server Error:", error);
-    };
-
-    console.log(`MCP Server ${name} v${version} started on port ${server.port}`);
-    console.log(`Process ID: ${Deno.pid}`);
+    console.log(`MCP Server ${name} v${version} started`);
+    console.log(`Process ID: ${process.pid}`);
     
     return server;
   } catch (error) {
@@ -200,9 +207,11 @@ async function getCompletedResponse(response: Response): Promise<string> {
 }
 
 // Start the server
-try {
-  await startMcpServer();
-} catch (e: unknown) {
-  console.error("Failed to start MCP server:", e);
-  Deno.exit(1); // Exit if server fails to start
-}
+(async () => {
+  try {
+    await startMcpServer();
+  } catch (e: unknown) {
+    console.error("Failed to start MCP server:", e);
+    process.exit(1);
+  }
+})();

@@ -4,6 +4,8 @@
 
 A lightweight [MCP (Model Context Protocol)](https://docs.anthropic.com/en/docs/agents-and-tools/mcp) server that forwards messages to the designbot.deno.dev/chat endpoint. This allows you to access the Designsystemet assistant through any MCP-compatible client like Windsurf, Cursor or Claude Code.
 
+To pin to a specific MCP version, install with a version suffix (e.g., `@simon-archer/designbot-mcp@latest`; ).
+
 ## Usage
 
 ### With Windsurf or Cursor
@@ -16,8 +18,7 @@ Add this to your `mcp_config.json` file:
     "Designbot": {
       "command": "npx",
       "args": [
-        "-y",
-        "@simon-archer/designbot-mcp"
+        "@simon-archer/designbot-mcp@latest"
       ]
     }
   }
@@ -38,16 +39,20 @@ Here's an example configuration, though the specific setting key (e.g., `mcp.ser
 
 ```json
 {
-  "mcp.servers": { // Adjust this key based on your VSCode MCP extension
-    "Designbot": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@simon-archer/designbot-mcp"
-      ]
+    "chat.mcp.discovery.enabled": true,
+    "mcp": {
+        
+        "inputs": [],
+        "servers": {
+            "Designbot": {
+            "command": "npx",
+            "args": [
+                "@simon-archer/designbot-mcp@latest"
+            ]
+            }
+        }
     }
-  }
-}
+}   
 ```
 
 Once configured, you should be able to interact with the Designbot through your MCP-compatible VSCode extension, similar to the Windsurf/Cursor example:
@@ -60,16 +65,44 @@ Ask the designbot how to use the Accordion component
 
 The MCP server provides a single tool:
 
-- `designbot-chat`: Forwards messages to the designbot.deno.dev/chat endpoint
+- `Ask-designbot`: Forwards messages to the configured `/chat` endpoint (defaults to `https://designbot.deno.dev/chat` or your local Fresh server). Supports sub-queries:
+  - **getComponentDoc**: Component docs and usage examples
+  - **getComponentCode**: React/HTML code snippets
+  - **getCssCode**: CSS-only implementations
+  - **getStarted**: Onboarding and setup guides
+  - **getChangelog**: Version history
+  - **getBasics**: Core design concepts
+  - **getGoodPractice**: Implementation best practices
+  - **getUxPatterns**: Common UX patterns
+  - **getDesignModification**: Design tokens (colors, typography, spacing)
 
-This tool is a wrapper to get access to the [Designbot](https://designbot.deno.dev/), inside your IDE.
+You can pin to a specific MCP version by specifying `@simon-archer/designbot-mcp@<version>` in your `mcp_config.json` (defaults to `latest`).
 
-### Example Usage
+## HTTP Endpoint
+
+This server also exposes a simple HTTP API at `/chat`. Send a POST request with JSON:
+
+```json
+{
+  "message": "Your message",
+  "disabledTools": ["toolName"] // optional array of tool names to disable
+}
+```
+
+Example cURL request:
+
+```bash
+curl -N \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Test SSE","disabledTools":[]}' \
+  http://localhost:8000/chat
+```
+
+#### SSE Response Example
 
 ```
-"What are the main components in the design system? Ask Designbot"
-"How do I implement the Button component? Ask Designbot"
-"Tell me about accessibility in the design system, Ask Designbot"
+data: {"role":"assistant","content":"Could you clarify?","isPartial":true}
+data: {"role":"assistant","content":"Could you clarify what you're asking?","isPartial":false}
 ```
 
 ## API

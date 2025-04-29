@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import process from 'node:process';
-import { startMcpServer } from './server.ts';
+import { startMcpServer } from './server';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
