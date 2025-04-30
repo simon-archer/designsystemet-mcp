@@ -78,32 +78,6 @@ The MCP server provides a single tool:
 
 You can pin to a specific MCP version by specifying `@simon-archer/designbot-mcp@<version>` in your `mcp_config.json` (defaults to `latest`).
 
-## HTTP Endpoint
-
-This server also exposes a simple HTTP API at `/chat`. Send a POST request with JSON:
-
-```json
-{
-  "message": "Your message",
-  "disabledTools": ["toolName"] // optional array of tool names to disable
-}
-```
-
-Example cURL request:
-
-```bash
-curl -N \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Test SSE","disabledTools":[]}' \
-  http://localhost:8000/chat
-```
-
-#### SSE Response Example
-
-```
-data: {"role":"assistant","content":"Could you clarify?","isPartial":true}
-data: {"role":"assistant","content":"Could you clarify what you're asking?","isPartial":false}
-```
 
 ## API
 
